@@ -46,7 +46,6 @@ public class GameOverPanelController : MonoBehaviour
         if (!isSecondChance)
         {
             YG2.RewardedAdvShow(rewardID, OnRewardCallback);
-            Time.timeScale = 0f;
         }
         else
         {
@@ -80,6 +79,7 @@ public class GameOverPanelController : MonoBehaviour
         {
             playerController.ResetInvincibility();
             playerController.ForceResetControl();
+            playerController.UnfreezeAfterRevive();
         }
 
         if (heartManager != null)
@@ -90,6 +90,14 @@ public class GameOverPanelController : MonoBehaviour
 
         Time.timeScale = 1f;
 
+        GameObject levelObject = GameObject.FindGameObjectWithTag("LVL_1");
+        if (levelObject != null)
+        {
+            AudioSource audio = levelObject.GetComponent<AudioSource>();
+            if (audio != null)
+                audio.UnPause();
+        }
+
         _menuButton.gameObject.SetActive(true);
 
         string deviceStr = YG2.envir.deviceType;
@@ -98,6 +106,8 @@ public class GameOverPanelController : MonoBehaviour
 
         if (pauseMenu != null)
             pauseMenu.ResumeGame();
+
+        YG2.GameplayStart();
     }
 
     private void OnMainMenuClicked()

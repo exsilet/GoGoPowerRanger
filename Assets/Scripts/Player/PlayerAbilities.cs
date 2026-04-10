@@ -87,25 +87,24 @@ public class PlayerAbilities : MonoBehaviour
 
     void Update()
     {
-		if (Input.GetKeyDown(KeyCode.Alpha1))
-        {
-            ActivateHeal();
-        }
-		
-		if (isShieldAvailable && Input.GetKeyDown(KeyCode.Alpha2))
-		{
-			ActivateShield();
-		}
-		
-		if (isSlowMoAvailable && Input.GetKeyDown(KeyCode.Alpha3))
-        {
-            ActivateSlowMo();
-        }
-		
-		CheckAndActivatePanels();
-		UpdateHealCounterUI();
-		UpdateSlowMoCounterUI();
-		UpdateShieldCounterUI();
+	    if (Input.GetKeyDown(KeyCode.Alpha1))
+	    {
+		    ActivateHeal();
+	    }
+
+	    if (isShieldAvailable && Input.GetKeyDown(KeyCode.Alpha2))
+	    {
+		    ActivateShield();
+	    }
+
+	    if (isSlowMoAvailable && Input.GetKeyDown(KeyCode.Alpha3))
+	    {
+		    ActivateSlowMo();
+	    }
+
+	    UpdateHealCounterUI();
+	    UpdateSlowMoCounterUI();
+	    UpdateShieldCounterUI();
     }
 
     public void ActivateShield()
@@ -375,10 +374,12 @@ public class PlayerAbilities : MonoBehaviour
 		int currentLevel = levelManager.unlockedSubLevel;
 
 		isShieldAvailable = currentLevel >= 5;
-		if (shieldSkillUI != null) shieldSkillUI.SetActive(isShieldAvailable);
+		if (shieldSkillUI != null)
+			shieldSkillUI.SetActive(isShieldAvailable);
 
 		isSlowMoAvailable = currentLevel >= 20;
-		if (slowMoSkillUI != null) slowMoSkillUI.SetActive(isSlowMoAvailable);
+		if (slowMoSkillUI != null)
+			slowMoSkillUI.SetActive(isSlowMoAvailable);
 	}
 	
 	private void CheckAndActivatePanels()
@@ -391,20 +392,14 @@ public class PlayerAbilities : MonoBehaviour
 
 		int currentLevel = levelManager.unlockedSubLevel;
 
-		if (currentLevel >= 0 && panelLevel10 != null)
-		{
-			panelLevel10.SetActive(false);
-		}
+		if (panelLevel10 != null)
+			panelLevel10.SetActive(currentLevel == 10);
 
-		if (currentLevel >= 0 && panelLevel15 != null)
-		{
-			panelLevel15.SetActive(false);
-		}
+		if (panelLevel15 != null)
+			panelLevel15.SetActive(currentLevel == 15);
 
-		if (currentLevel >= 0 && panelLevel20 != null)
-		{
-			panelLevel20.SetActive(false);
-		}
+		if (panelLevel20 != null)
+			panelLevel20.SetActive(currentLevel == 20);
 	}
 	
 	// public void SaveSkillCounts()

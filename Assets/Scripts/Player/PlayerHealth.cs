@@ -1,5 +1,6 @@
 using UnityEngine;
 using System.Collections;
+using YG;
 
 public class PlayerHealth : MonoBehaviour
 {
@@ -35,53 +36,44 @@ public class PlayerHealth : MonoBehaviour
 
     void Start()
     {
-        // Устанавливаем начальное здоровье при запуске игры
-        ResetHealth();  // Используем новый метод для установки здоровья
-		currentHealth = maxHealth;  // Изначально здоровье равно максимальному
-		
-		mainCamera = Camera.main;  // Получаем ссылку на основную камеру
-        originalCameraPosition = mainCamera.transform.position;  // Сохраняем начальную позицию камеры
-		
-		
-        if (heartManager != null)
-        {
-            heartManager.UpdateHeartDisplay();  // Обновляем отображение сердечек в начале игры
-        }
+	    ResetHealth();
+	    mainCamera = Camera.main;
+	    originalCameraPosition = mainCamera.transform.position;
+
+	    if (heartManager != null)
+		    heartManager.UpdateHeartDisplay();
     }
 
     // Метод получения урона
     public void TakeDamage(int damage)
     {
-		
-		if (GetComponent<PlayerController>().isInvincible) // Если игрок неуязвим, игнорируем урон
-		{
-			Debug.Log("Урон заблокирован щитом!");
-			return;
-		}
-		
-        currentHealth -= damage;
-        Debug.Log("Получен урон! Текущее здоровье: " + currentHealth);
-		
-		// Запуск shake камеры
-        if (useShakeEffect && !isShaking)
-        {
-            StartCoroutine(ShakeCamera());  // Запуск шейка камеры
-        }
-		
-		// Воспроизводим звук получения урона
-        PlayDamageSound();
+	    if (GetComponent<PlayerController>().isInvincible)
+	    {
+		    Debug.Log("Урон заблокирован щитом!");
+		    return;
+	    }
 
-        // Проверяем, не закончилось ли здоровье
-        if (currentHealth <= 0)
-        {
-            Die();
-        }
-		
-		// Уведомляем HeartManager, чтобы обновить сердечки
-        if (heartManager != null)
-        {
-            heartManager.UpdateHeartDisplay();  // Обновляем отображение
-        }
+	    currentHealth -= damage;
+	    Debug.Log("Получен урон! Текущее здоровье: " + currentHealth);
+
+	    bool isFatalHit = currentHealth <= 0;
+
+	    if (!isFatalHit && useShakeEffect && !isShaking)
+	    {
+		    StartCoroutine(ShakeCamera());
+	    }
+
+	    PlayDamageSound();
+
+	    if (currentHealth <= 0)
+	    {
+		    Die();
+	    }
+
+	    if (heartManager != null)
+	    {
+		    heartManager.UpdateHeartDisplay();
+	    }
     }
 	
 	void PlayDamageSound()
@@ -106,40 +98,30 @@ public class PlayerHealth : MonoBehaviour
 	    PlayerAbilities playerAbilities = GetComponent<PlayerAbilities>();
 
 	    if (playerController != null)
+	    {
 		    playerController.StopBlinkEffect();
+		    playerController.FreezePlayerOnDeath();
+	    }
 
 	    if (playerAbilities != null)
 		    playerAbilities.ResetAbilities();
 
 	    Time.timeScale = 0f;
-		
-		// Поставить музыку на паузу
-		GameObject levelObject = GameObject.FindGameObjectWithTag("LVL_1");
-		if (levelObject != null)
-		{
-			AudioSource audio = levelObject.GetComponent<AudioSource>();
-			if (audio != null)
-			{
-				audio.Pause();
-				Debug.Log("Музыка поставлена на паузу для объекта с тегом LVL_1");
-			}
-		}
+	    YG2.GameplayStop();
 
-        // Запуск эффекта смерти перед панелью Game Over
-        if (deathEffect != null)
-        {
-            // Получаем текущее положение игрока из PlayerController
-            Vector3 playerPosition = transform.position;
+	    GameObject levelObject = GameObject.FindGameObjectWithTag("LVL_1");
+	    if (levelObject != null)
+	    {
+		    AudioSource audio = levelObject.GetComponent<AudioSource>();
+		    if (audio != null)
+			    audio.Pause();
+	    }
 
-            // Запускаем эффект смерти на позиции игрока
-            Instantiate(deathEffect, playerPosition, Quaternion.identity);
-        }
+	    if (deathEffect != null)
+		    Instantiate(deathEffect, transform.position, Quaternion.identity);
 
-        // Показываем панель Game Over только после завершения эффекта
-        if (gameOverPanel != null)
-        {
-            StartCoroutine(ShowGameOverPanelAfterEffect());
-        }
+	    if (gameOverPanel != null)
+		    StartCoroutine(ShowGameOverPanelAfterEffect());
     }
 	
 	
@@ -167,22 +149,17 @@ public class PlayerHealth : MonoBehaviour
     // Метод для восстановления игры после паузы
     public void RestartGame()
     {
-		
-		currentHealth = maxHealth;  // Восстанавливаем здоровье
-		
-		// Сброс мигания и неуязвимости
-		PlayerController playerController = GetComponent<PlayerController>();
-		if (playerController != null)
-		{
-			playerController.StopBlinkEffect();
-		}
-		
-        // Включаем время обратно
-        Time.timeScale = 1f;
+	    PlayerController playerController = GetComponent<PlayerController>();
+	    PlayerAbilities playerAbilities = GetComponent<PlayerAbilities>();
 
-        // Восстанавливаем здоровье
-        ResetHealth();
+	    if (playerController != null)
+		    playerController.StopBlinkEffect();
 
+	    if (playerAbilities != null)
+		    playerAbilities.ResetAbilities();
+
+	    ResetHealth();
+	    Time.timeScale = 1f;
     }
 	
 	public void IncreaseHealth(int healthAmount)
@@ -202,37 +179,32 @@ public class PlayerHealth : MonoBehaviour
 	// Корутину для камеры shake
     private IEnumerator ShakeCamera()
 	{
-		isShaking = true;  // Включаем флаг шейка
-		float shakeTime = 0f;  // Время, которое прошло с начала шейка
+		isShaking = true;
+		float shakeTime = 0f;
 
-		// Процесс шейка
+		Vector3 baseCameraPosition = mainCamera.transform.position;
+
 		while (shakeTime < shakeDuration)
 		{
-			// Используем unscaledDeltaTime для правильной работы времени при паузе
 			shakeTime += Time.unscaledDeltaTime;
 
-			// Если игра на паузе, завершить шейк
 			if (Time.timeScale == 0)
 			{
-				yield return null;  // Прерываем выполнение на кадр, но продолжаем в будущем
+				yield return null;
 				continue;
 			}
 
-			// Генерация случайных смещений для шейка камеры
 			float xShake = Random.Range(-shakeStrength, shakeStrength);
 			float yShake = Random.Range(-shakeStrength, shakeStrength);
 			Vector3 shakeOffset = new Vector3(xShake, yShake, 0);
 
-			// Смещаем камеру
-			mainCamera.transform.position = originalCameraPosition + shakeOffset;
+			mainCamera.transform.position = baseCameraPosition + shakeOffset;
 
-			yield return null;  // Ждем один кадр
+			yield return null;
 		}
 
-		// Восстанавливаем камеру на исходную позицию
-		mainCamera.transform.position = originalCameraPosition;
-
-		isShaking = false;  // Выключаем флаг шейка
+		mainCamera.transform.position = baseCameraPosition;
+		isShaking = false;
 	}
 	
 	// Публичные методы для доступа к текущему здоровью и максимальному здоровью

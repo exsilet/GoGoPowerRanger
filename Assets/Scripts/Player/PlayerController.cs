@@ -45,6 +45,8 @@ public class PlayerController : MonoBehaviour
 	
 	private Coroutine blinkCoroutine;
 	private Coroutine disableControlCoroutine;
+	private SpriteRenderer spriteRenderer;
+	private SafeZone safeZone;
 	
 	// Ссылки для мобильного управления
     public Joystick joystick; // Джойстик для мобильных устройств
@@ -57,6 +59,9 @@ public class PlayerController : MonoBehaviour
 
     void Start()
     {
+	    spriteRenderer = GetComponent<SpriteRenderer>();
+	    safeZone = FindObjectOfType<SafeZone>();
+	    
         // Получаем компонент PlayerHealth
         playerHealth = GetComponent<PlayerHealth>();
 		
@@ -79,6 +84,9 @@ public class PlayerController : MonoBehaviour
 
     void Update()
 	{
+		if (isControlDisabled || Time.timeScale == 0f)
+			return;
+		
 		if (isControlDisabled) return;
 		
 		if (isMobile)
@@ -107,7 +115,7 @@ public class PlayerController : MonoBehaviour
 		if (isBoosting)
 		{
 			// Ускоренное движение игрока к целевой точке
-			transform.position = Vector3.MoveTowards(transform.position, targetPosition, boostSpeed * Time.unscaledDeltaTime);
+			transform.position = Vector3.MoveTowards(transform.position, targetPosition, boostSpeed * Time.deltaTime);
 
 			// Проверяем, достиг ли игрок целевой точки
 			if (transform.position == targetPosition)
@@ -183,28 +191,24 @@ public class PlayerController : MonoBehaviour
 	// Управление для ПК
     void DesktopControl()
     {
-        float horizontal = Input.GetAxis("Horizontal");
-        float vertical = Input.GetAxis("Vertical");
+	    float horizontal = Input.GetAxis("Horizontal");
+	    float vertical = Input.GetAxis("Vertical");
 
-        Vector3 movement = new Vector3(horizontal, vertical, 0f);
-        transform.position += movement * moveSpeed * Time.unscaledDeltaTime;
-		
-				// Переключение FlipX
-		SpriteRenderer spriteRenderer = GetComponent<SpriteRenderer>();
-		if (Input.GetKey(KeyCode.A))
-		{
-			spriteRenderer.flipX = true;
-		}
-		else if (Input.GetKey(KeyCode.D))
-		{
-			spriteRenderer.flipX = false;
-		}
+	    Vector3 movement = new Vector3(horizontal, vertical, 0f);
+	    transform.position += movement * moveSpeed * Time.deltaTime;
 
-		// Ускорение
-		if (Input.GetKeyDown(KeyCode.LeftShift) && !isBoosting)
-		{
-			Boost();
-		}
+	    if (spriteRenderer != null)
+	    {
+		    if (Input.GetKey(KeyCode.A))
+			    spriteRenderer.flipX = true;
+		    else if (Input.GetKey(KeyCode.D))
+			    spriteRenderer.flipX = false;
+	    }
+
+	    if (Input.GetKeyDown(KeyCode.LeftShift) && !isBoosting)
+	    {
+		    Boost();
+	    }
     }
 
     // Управление для мобильных
@@ -214,7 +218,7 @@ public class PlayerController : MonoBehaviour
         float vertical = joystick.Vertical;
 
         Vector3 movement = new Vector3(horizontal, vertical, 0f);
-        transform.position += movement * moveSpeed * Time.unscaledDeltaTime;
+        transform.position += movement * moveSpeed * Time.deltaTime;
     }
 	
     public void DisableControlForDuration(float duration, bool playSound = true)
@@ -325,6 +329,26 @@ public class PlayerController : MonoBehaviour
 		}
 	}
 	
+	public void FreezePlayerOnDeath()
+	{
+		isControlDisabled = true;
+		isBoosting = false;
+		targetPosition = transform.position;
+
+		if (disableControlCoroutine != null)
+		{
+			StopCoroutine(disableControlCoroutine);
+			disableControlCoroutine = null;
+		}
+	}
+
+	public void UnfreezeAfterRevive()
+	{
+		isControlDisabled = false;
+		isBoosting = false;
+		targetPosition = transform.position;
+	}
+	
 	private void TakeDamageFromCrack()
 	{
 		if (!isInvincible)
@@ -352,54 +376,56 @@ public class PlayerController : MonoBehaviour
 			StopCoroutine(disableControlCoroutine);
 			disableControlCoroutine = null;
 		}
-
-		Debug.Log("Управление принудительно сброшено");
 	}
 
     // Метод для получения урона при столкновении с препятствием
     private void TakeDamageFromObstacle()
-	{
-		if (!isInvincible)
-		{
-			SafeZone safeZone = FindObjectOfType<SafeZone>();
-			if (safeZone != null)
-			{
-				Debug.Log($"SafeZone status: {safeZone.IsPlayerInside()}"); // Проверяем состояние
-				if (safeZone.IsPlayerInside())
-				{
-					Debug.Log("Игрок в безопасной зоне, урон не нанесён.");
-					return; // Игрок защищён
-				}
-			}
-			else
-			{
-				Debug.LogWarning("SafeZone не найдена!");
-			}
+    {
+	    if (!isInvincible)
+	    {
+		    if (safeZone != null)
+		    {
+			    Debug.Log($"SafeZone status: {safeZone.IsPlayerInside()}");
+			    if (safeZone.IsPlayerInside())
+			    {
+				    Debug.Log("Игрок в безопасной зоне, урон не нанесён.");
+				    return;
+			    }
+		    }
+		    else
+		    {
+			    Debug.LogWarning("SafeZone не найдена!");
+		    }
 
-			Debug.Log("Игрок получил урон от препятствия!");
-			playerHealth.TakeDamage(1);
-			StartCoroutine(BlinkEffect());
-		}
-	}
+		    Debug.Log("Игрок получил урон от препятствия!");
+		    playerHealth.TakeDamage(1);
+
+		    if (blinkCoroutine != null)
+			    StopCoroutine(blinkCoroutine);
+
+		    blinkCoroutine = StartCoroutine(BlinkEffect());
+	    }
+    }
 
     // Корутина для мигания и временной неуязвимости
     IEnumerator BlinkEffect()
     {
-        isInvincible = true;
+	    isInvincible = true;
 
-        // Пример мигания: меняем прозрачность спрайта
-        SpriteRenderer playerSprite = GetComponent<SpriteRenderer>();
+	    SpriteRenderer playerSprite = spriteRenderer;
+	    if (playerSprite == null)
+		    yield break;
 
-        for (int i = 0; i < 5; i++)
-        {
-            playerSprite.color = new Color(1f, 1f, 1f, 0.5f);  // Полупрозрачный
-            yield return new WaitForSeconds(0.1f);
-            playerSprite.color = new Color(1f, 1f, 1f, 1f);  // Полностью видимый
-            yield return new WaitForSeconds(0.1f);
-        }
+	    for (int i = 0; i < 5; i++)
+	    {
+		    playerSprite.color = new Color(1f, 1f, 1f, 0.5f);
+		    yield return new WaitForSeconds(0.1f);
+		    playerSprite.color = new Color(1f, 1f, 1f, 1f);
+		    yield return new WaitForSeconds(0.1f);
+	    }
 
-        yield return new WaitForSeconds(invincibleTime);  // Время полной неуязвимости после удара
-        isInvincible = false;
+	    yield return new WaitForSeconds(invincibleTime);
+	    isInvincible = false;
     }
 	
 	public void StopBlinkEffect()
@@ -408,16 +434,10 @@ public class PlayerController : MonoBehaviour
 		{
 			StopCoroutine(blinkCoroutine);
 			blinkCoroutine = null;
-
-			// Убедитесь, что спрайт игрока полностью видим
-			SpriteRenderer playerSprite = GetComponent<SpriteRenderer>();
-			if (playerSprite != null)
-			{
-				playerSprite.color = new Color(1f, 1f, 1f, 1f);
-			}
-
-			isInvincible = false; // Сбрасываем флаг неуязвимости
 		}
+
+		if (spriteRenderer != null)
+			spriteRenderer.enabled = true;
 	}
 	
 	void PlayDestructionSound()
