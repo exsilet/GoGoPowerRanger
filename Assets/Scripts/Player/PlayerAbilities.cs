@@ -370,34 +370,15 @@ public class PlayerAbilities : MonoBehaviour
 	
 	public void UpdateSkillAvailability()
 	{
-		if (levelManager != null)
-		{
-			int currentLevel = levelManager.unlockedSubLevel;
+		if (levelManager == null) return;
 
-			// Щит доступен с уровня 5
-			if (currentLevel >= 0)
-			{
-				isShieldAvailable = true;
-				if (shieldSkillUI != null) shieldSkillUI.SetActive(true);
-			}
-			else
-			{
-				isShieldAvailable = false;
-				if (shieldSkillUI != null) shieldSkillUI.SetActive(false);
-			}
+		int currentLevel = levelManager.unlockedSubLevel;
 
-			// Slow-Mo доступен с уровня 20
-			if (currentLevel >= 0)
-			{
-				isSlowMoAvailable = true;
-				if (slowMoSkillUI != null) slowMoSkillUI.SetActive(true);
-			}
-			else
-			{
-				isSlowMoAvailable = false;
-				if (slowMoSkillUI != null) slowMoSkillUI.SetActive(false);
-			}
-		}
+		isShieldAvailable = currentLevel >= 5;
+		if (shieldSkillUI != null) shieldSkillUI.SetActive(isShieldAvailable);
+
+		isSlowMoAvailable = currentLevel >= 20;
+		if (slowMoSkillUI != null) slowMoSkillUI.SetActive(isSlowMoAvailable);
 	}
 	
 	private void CheckAndActivatePanels()

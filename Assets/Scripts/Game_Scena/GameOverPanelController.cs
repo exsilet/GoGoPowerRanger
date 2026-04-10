@@ -66,32 +66,38 @@ public class GameOverPanelController : MonoBehaviour
         UpdateRetryButton();
 
         PlayerHealth playerHealth = FindObjectOfType<PlayerHealth>();
-        if (playerHealth != null) 
+        PlayerController playerController = FindObjectOfType<PlayerController>();
+        PlayerAbilities playerAbilities = FindObjectOfType<PlayerAbilities>();
+        PauseMenuController pauseMenu = FindObjectOfType<PauseMenuController>();
+
+        if (playerAbilities != null)
+            playerAbilities.ResetAbilities();
+
+        if (playerHealth != null)
             playerHealth.RestartGame();
 
-        PlayerController playerController = FindObjectOfType<PlayerController>();
-        if (playerController != null) 
+        if (playerController != null)
+        {
             playerController.ResetInvincibility();
+            playerController.ForceResetControl();
+        }
 
-        if (heartManager != null) 
+        if (heartManager != null)
             heartManager.ResetHearts();
 
-        if (gameOverPanel != null) 
+        if (gameOverPanel != null)
             gameOverPanel.SetActive(false);
 
-        Debug.Log("Вторая попытка предоставлена.");
-        
         Time.timeScale = 1f;
-        
+
         _menuButton.gameObject.SetActive(true);
-        
+
         string deviceStr = YG2.envir.deviceType;
-        if (deviceStr == "desktop")
-            _skillsPC.gameObject.SetActive(true);
-        else if (deviceStr == "mobile")
-            _skillsMobile.gameObject.SetActive(true);
-        
-        FindObjectOfType<PauseMenuController>().GetComponent<MonoBehaviour>().Invoke("ResumeGame", 0f);
+        if (deviceStr == "desktop") _skillsPC.gameObject.SetActive(true);
+        else if (deviceStr == "mobile") _skillsMobile.gameObject.SetActive(true);
+
+        if (pauseMenu != null)
+            pauseMenu.ResumeGame();
     }
 
     private void OnMainMenuClicked()

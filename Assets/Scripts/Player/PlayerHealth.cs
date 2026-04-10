@@ -100,17 +100,18 @@ public class PlayerHealth : MonoBehaviour
     // Метод для обработки смерти игрока
     void Die()
     {
-        Debug.Log("Игрок умер!");
-		
-		// Остановить мигание, если оно активно
-		PlayerController playerController = GetComponent<PlayerController>();
-		if (playerController != null)
-		{
-			playerController.StopBlinkEffect();
-		}
-        
-        // Останавливаем игру (пауза)
-        Time.timeScale = 0f;
+	    Debug.Log("Игрок умер!");
+
+	    PlayerController playerController = GetComponent<PlayerController>();
+	    PlayerAbilities playerAbilities = GetComponent<PlayerAbilities>();
+
+	    if (playerController != null)
+		    playerController.StopBlinkEffect();
+
+	    if (playerAbilities != null)
+		    playerAbilities.ResetAbilities();
+
+	    Time.timeScale = 0f;
 		
 		// Поставить музыку на паузу
 		GameObject levelObject = GameObject.FindGameObjectWithTag("LVL_1");

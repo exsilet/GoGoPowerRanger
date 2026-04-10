@@ -44,6 +44,7 @@ public class PlayerController : MonoBehaviour
 	public ParticleSystem keyDParticle;   // Партикл для буквы D
 	
 	private Coroutine blinkCoroutine;
+	private Coroutine disableControlCoroutine;
 	
 	// Ссылки для мобильного управления
     public Joystick joystick; // Джойстик для мобильных устройств
@@ -216,9 +217,12 @@ public class PlayerController : MonoBehaviour
         transform.position += movement * moveSpeed * Time.unscaledDeltaTime;
     }
 	
-	public void DisableControlForDuration(float duration, bool playSound = true)
+    public void DisableControlForDuration(float duration, bool playSound = true)
     {
-        StartCoroutine(DisableControlCoroutine(duration, playSound));
+	    if (disableControlCoroutine != null)
+		    StopCoroutine(disableControlCoroutine);
+
+	    disableControlCoroutine = StartCoroutine(DisableControlCoroutine(duration, playSound));
     }
 
 	private IEnumerator DisableControlCoroutine(float duration, bool playSound)
@@ -323,11 +327,14 @@ public class PlayerController : MonoBehaviour
 	
 	private void TakeDamageFromCrack()
 	{
-		if (!isInvincible) // Проверяем, если игрок не неуязвим
+		if (!isInvincible)
 		{
-			Debug.Log("Игрок получил урон от трещины!");
 			playerHealth.TakeDamage(1);
-			StartCoroutine(BlinkEffect());
+
+			if (blinkCoroutine != null)
+				StopCoroutine(blinkCoroutine);
+
+			blinkCoroutine = StartCoroutine(BlinkEffect());
 		}
 	}
 	
@@ -339,7 +346,13 @@ public class PlayerController : MonoBehaviour
 	public void ForceResetControl()
 	{
 		isControlDisabled = false;
-		StopCoroutine(nameof(DisableControlCoroutine));
+
+		if (disableControlCoroutine != null)
+		{
+			StopCoroutine(disableControlCoroutine);
+			disableControlCoroutine = null;
+		}
+
 		Debug.Log("Управление принудительно сброшено");
 	}
 

@@ -10,13 +10,12 @@ public class CameraFollow : MonoBehaviour
 
     void LateUpdate()
     {
-        // Целевая позиция камеры с учетом смещения
         Vector3 desiredPosition = player.position + offset;
-
-        // Плавное перемещение камеры к целевой позиции
-        Vector3 smoothedPosition = Vector3.Lerp(transform.position, desiredPosition, smoothSpeed);
-
-        // Обновляем позицию камеры
+        Vector3 smoothedPosition = Vector3.Lerp(
+            transform.position,
+            desiredPosition,
+            smoothSpeed * Time.deltaTime
+        );
         transform.position = smoothedPosition;
     }
 }
