@@ -35,7 +35,7 @@ There is no room for mistakes.
 
 ## 🚀 Play the Game
 
-👉 https://yandex.ru/games/app/439436
+👉 [https://yandex.ru/games/app/439436](https://yandex.ru/games/app/403408?draft=true&lang=ru)
 
 ## 📦 Tech
 
