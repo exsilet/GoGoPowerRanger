@@ -4,13 +4,16 @@ using UnityEngine;
 
 public class Mechanic5_4 : MonoBehaviour, IBossMechanic
 {
-    public Transform boss;
-    public GameObject projectilePrefab;
-    public Transform player;
-    public int shotsPerSequence = 3;
-    public float blinkDuration = 0.3f;
-    public float teleportDelay = 0.5f;
-    public int sequenceCount = 3;
+    [SerializeField] private Transform boss;
+    [SerializeField] private GameObject projectilePrefab;
+    [SerializeField] private Transform player;
+    [SerializeField] private AudioSource shootSound;
+
+    [SerializeField] private int shotsPerSequence = 3;
+    [SerializeField] private float blinkDuration = 0.3f;
+    [SerializeField] private float teleportDelay = 0.5f;
+    [SerializeField] private int sequenceCount = 3;
+    [SerializeField] private float projectileSpeed = 5f;
 
     private Vector2 minBounds;
     private Vector2 maxBounds;
@@ -18,19 +21,41 @@ public class Mechanic5_4 : MonoBehaviour, IBossMechanic
     private float bossHeight;
     private SpriteRenderer bossSpriteRenderer;
 
-    private List<GameObject> projectiles = new List<GameObject>(); // Список для отслеживания всех выпущенных снарядов
-    private Collider2D[] boundaryColliders; // Список всех объектов с тегом "Boundary"
-	public AudioSource shootSound; // Звук выстрела
+    private readonly List<GameObject> projectiles = new List<GameObject>();
+    private Collider2D[] boundaryColliders;
 
     private void Start()
     {
-        // Рассчитываем границы камеры и размеры босса
-        CalculateCameraBounds();
-        bossWidth = boss.GetComponent<SpriteRenderer>().bounds.extents.x;
-        bossHeight = boss.GetComponent<SpriteRenderer>().bounds.extents.y;
-        bossSpriteRenderer = boss.GetComponent<SpriteRenderer>();
+        if (boss == null)
+            boss = transform;
 
-        // Находим все объекты с тегом "Boundary"
+        if (player == null)
+        {
+            PlayerController pc = FindObjectOfType<PlayerController>();
+            if (pc != null)
+                player = pc.transform;
+        }
+
+        if (boss == null || projectilePrefab == null || player == null)
+        {
+            Debug.LogError("Mechanic5_4: не назначены обязательные ссылки.");
+            enabled = false;
+            return;
+        }
+
+        CalculateCameraBounds();
+
+        bossSpriteRenderer = boss.GetComponent<SpriteRenderer>();
+        if (bossSpriteRenderer == null)
+        {
+            Debug.LogError("Mechanic5_4: у boss нет SpriteRenderer.");
+            enabled = false;
+            return;
+        }
+
+        bossWidth = bossSpriteRenderer.bounds.extents.x;
+        bossHeight = bossSpriteRenderer.bounds.extents.y;
+
         GameObject[] boundaries = GameObject.FindGameObjectsWithTag("Boundary");
         boundaryColliders = new Collider2D[boundaries.Length];
         for (int i = 0; i < boundaries.Length; i++)
@@ -41,120 +66,118 @@ public class Mechanic5_4 : MonoBehaviour, IBossMechanic
 
     public IEnumerator Execute()
     {
-        // Отключаем коллайдеры объектов с тегом "Boundary"
+        if (!enabled)
+            yield break;
+
         SetBoundaryCollidersEnabled(false);
 
         for (int i = 0; i < sequenceCount; i++)
         {
-            // Шаг 1: Босс мигает
             yield return StartCoroutine(BlinkBoss(2, blinkDuration));
 
-            // Шаг 2: Босс становится невидимым
             SetBossVisibility(false);
-
-            // Задержка перед телепортацией
             yield return new WaitForSeconds(teleportDelay);
 
-            // Шаг 3: Босс телепортируется и становится видимым
             TeleportBoss();
             SetBossVisibility(true);
 
-            // Шаг 4: Босс стреляет в игрока
             yield return StartCoroutine(ShootProjectiles());
 
-            // Пауза перед следующим циклом
             yield return new WaitForSeconds(teleportDelay);
         }
 
-        // Шаг 6: Босс мигает в конце
         yield return StartCoroutine(BlinkBoss(2, blinkDuration));
 
-        // Включаем коллайдеры объектов с тегом "Boundary"
         SetBoundaryCollidersEnabled(true);
-
-        // Удаляем все выпущенные снаряды
         DestroyAllProjectiles();
-
-        // Шаг 7: Конец механики
     }
 
-    private IEnumerator BlinkBoss(int blinkCount, float blinkDuration)
+    private IEnumerator BlinkBoss(int blinkCount, float duration)
     {
         for (int i = 0; i < blinkCount; i++)
         {
-            SetBossVisibility(false); // Скрыть босса
-            yield return new WaitForSeconds(blinkDuration);
-            SetBossVisibility(true);  // Показать босса
-            yield return new WaitForSeconds(blinkDuration);
+            SetBossVisibility(false);
+            yield return new WaitForSeconds(duration);
+            SetBossVisibility(true);
+            yield return new WaitForSeconds(duration);
         }
     }
 
     private void TeleportBoss()
     {
-        // Получаем случайные координаты в пределах видимой зоны, с учётом размеров босса
         float randomX = Random.Range(minBounds.x + bossWidth, maxBounds.x - bossWidth);
         float randomY = Random.Range(minBounds.y + bossHeight, maxBounds.y - bossHeight);
-        
         boss.position = new Vector2(randomX, randomY);
     }
 
     private void CalculateCameraBounds()
     {
         Camera mainCamera = Camera.main;
+        if (mainCamera == null)
+        {
+            Debug.LogError("Mechanic5_4: Camera.main не найдена.");
+            enabled = false;
+            return;
+        }
+
         minBounds = mainCamera.ViewportToWorldPoint(new Vector3(0, 0, mainCamera.nearClipPlane));
         maxBounds = mainCamera.ViewportToWorldPoint(new Vector3(1, 1, mainCamera.nearClipPlane));
     }
 
     private IEnumerator ShootProjectiles()
-	{
-		for (int i = 0; i < shotsPerSequence; i++)
-		{
-			// Проигрываем звук выстрела, если задан
-			if (shootSound != null)
-			{
-				shootSound.Play();
-			}
+    {
+        if (player == null || boss == null || projectilePrefab == null)
+            yield break;
 
-			// Создаём снаряд
-			GameObject projectile = Instantiate(projectilePrefab, boss.position, Quaternion.identity);
-			Vector2 direction = (player.position - boss.position).normalized;
-			projectile.GetComponent<Rigidbody2D>().velocity = direction * 5f; // Устанавливаем скорость снаряда
+        for (int i = 0; i < shotsPerSequence; i++)
+        {
+            if (shootSound != null)
+                shootSound.Play();
 
-			// Добавляем снаряд в список для последующего удаления
-			projectiles.Add(projectile);
+            GameObject projectile = Instantiate(projectilePrefab, boss.position, Quaternion.identity);
+            Rigidbody2D rb = projectile.GetComponent<Rigidbody2D>();
 
-			yield return new WaitForSeconds(0.2f); // Задержка между выстрелами
-		}
-	}
+            if (rb != null)
+            {
+                Vector2 direction = ((Vector2)player.position - (Vector2)boss.position).normalized;
+                rb.velocity = direction * projectileSpeed;
+            }
+            else
+            {
+                Debug.LogWarning("Mechanic5_4: у projectilePrefab нет Rigidbody2D.");
+            }
+
+            projectiles.Add(projectile);
+            yield return new WaitForSeconds(0.2f);
+        }
+    }
 
     private void SetBossVisibility(bool visible)
     {
         if (bossSpriteRenderer != null)
-        {
             bossSpriteRenderer.enabled = visible;
-        }
     }
 
-    private void SetBoundaryCollidersEnabled(bool enabled)
+    private void SetBoundaryCollidersEnabled(bool enabledValue)
     {
-        foreach (var collider in boundaryColliders)
+        if (boundaryColliders == null)
+            return;
+
+        foreach (Collider2D collider in boundaryColliders)
         {
             if (collider != null)
-            {
-                collider.enabled = enabled;
-            }
+                collider.enabled = enabledValue;
         }
     }
 
     private void DestroyAllProjectiles()
     {
-        foreach (var projectile in projectiles)
+        foreach (GameObject projectile in projectiles)
         {
             if (projectile != null)
-            {
                 Destroy(projectile);
-            }
         }
+
         projectiles.Clear();
     }
 }

@@ -26,6 +26,7 @@ public class PlayerHealth : MonoBehaviour
     private bool isShaking = false;  // Флаг, указывающий, идет ли шейк
 
     private Camera mainCamera;  // Камера
+    private LevelManager levelManager;
 	
 	public HeartManager heartManager;  // Ссылка на HeartManager
 	
@@ -38,6 +39,7 @@ public class PlayerHealth : MonoBehaviour
     {
 	    ResetHealth();
 	    mainCamera = Camera.main;
+	    levelManager = FindObjectOfType<LevelManager>();
 	    originalCameraPosition = mainCamera.transform.position;
 
 	    if (heartManager != null)
@@ -109,10 +111,9 @@ public class PlayerHealth : MonoBehaviour
 	    Time.timeScale = 0f;
 	    YG2.GameplayStop();
 
-	    GameObject levelObject = GameObject.FindGameObjectWithTag("LVL_1");
-	    if (levelObject != null)
+	    if (levelManager != null)
 	    {
-		    AudioSource audio = levelObject.GetComponent<AudioSource>();
+		    AudioSource audio = levelManager.GetCurrentLevelAudio();
 		    if (audio != null)
 			    audio.Pause();
 	    }

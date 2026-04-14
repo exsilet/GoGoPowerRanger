@@ -4,374 +4,417 @@ using UnityEngine;
 
 public class Mechanic5_5 : MonoBehaviour, IBossMechanic
 {
-    public Transform boss;
-    public GameObject thimblePrefab;
-    public GameObject soughtPrefab;
-    public GameObject weakSpotPrefab;
-    public Transform player;
-    public int repetitions = 3;
+    [SerializeField] private Transform boss;
+    [SerializeField] private GameObject thimblePrefab;
+    [SerializeField] private GameObject soughtPrefab;
+    [SerializeField] private GameObject weakSpotPrefab;
+    [SerializeField] private Transform player;
+    [SerializeField] private int repetitions = 3;
+    [SerializeField] private float choiceTimeout = 10f;
 
-    private List<GameObject> thimbles = new List<GameObject>();
-    private List<Vector2> thimblePositions = new List<Vector2>();
+    [SerializeField] private AudioSource audioSource;
+    [SerializeField] private AudioClip thimbleAppearClip;
+    [SerializeField] private AudioClip shuffleLoopClip;
+    [SerializeField] private AudioClip correctChoiceClip;
+    [SerializeField] private AudioClip wrongChoiceClip;
+
+    private readonly List<GameObject> thimbles = new List<GameObject>();
+    private readonly List<Vector2> thimblePositions = new List<Vector2>();
+
     private GameObject soughtObject;
     private int correctThimbleIndex;
     private BossController_3 bossController;
     private int correctChoices;
     private bool mechanicActive;
     private bool playerMadeChoice;
-	
-	public AudioSource audioSource;
-	public AudioClip thimbleAppearClip;      // Звук появления Thimble
-	public AudioClip shuffleLoopClip;       // Звук перемешивания (в лупе)
-	public AudioClip correctChoiceClip;     // Звук при правильном выборе
-	public AudioClip wrongChoiceClip;       // Звук при неправильном выборе
 
     private void Start()
     {
+        if (boss == null)
+            boss = transform;
+
+        if (player == null)
+        {
+            PlayerController pc = FindObjectOfType<PlayerController>();
+            if (pc != null)
+                player = pc.transform;
+        }
+
         bossController = GetComponentInParent<BossController_3>();
+
+        if (bossController == null)
+            Debug.LogError("Mechanic5_5: BossController_3 не найден.");
+
+        if (boss == null || thimblePrefab == null || soughtPrefab == null || weakSpotPrefab == null || player == null)
+            Debug.LogError("Mechanic5_5: не назначены обязательные ссылки.");
     }
 
-	public IEnumerator Execute()
-	{
-		mechanicActive = true;
-		correctChoices = 0;
+    public IEnumerator Execute()
+    {
+        if (boss == null || thimblePrefab == null || soughtPrefab == null || weakSpotPrefab == null || player == null)
+            yield break;
 
-		yield return StartCoroutine(MoveBossToCenter());
+        mechanicActive = true;
+        playerMadeChoice = false;
+        correctChoices = 0;
 
-		while (correctChoices < repetitions && mechanicActive)
-		{
-			playerMadeChoice = false;
+        CleanupObjects();
 
-			CreateThimbles();
-			yield return StartCoroutine(CreateAndHideSoughtObject());
+        yield return StartCoroutine(MoveBossToCenter());
 
-			yield return StartCoroutine(ShuffleThimbles());
+        while (correctChoices < repetitions && mechanicActive)
+        {
+            playerMadeChoice = false;
 
-			EnableThimbleInteraction(true);
+            CreateThimbles();
+            yield return StartCoroutine(CreateAndHideSoughtObject());
+            yield return StartCoroutine(ShuffleThimbles());
 
-			yield return new WaitUntil(() => playerMadeChoice);
+            EnableThimbleInteraction(true);
 
-			EnableThimbleInteraction(false);
+            float elapsed = 0f;
+            while (!playerMadeChoice && mechanicActive && elapsed < choiceTimeout)
+            {
+                elapsed += Time.deltaTime;
+                yield return null;
+            }
 
-			if (!mechanicActive)
-			{
-				EndMechanic();
-				yield break;
-			}
+            EnableThimbleInteraction(false);
 
-			if (correctChoices >= repetitions)
-			{
-				if (soughtObject != null)
-				{
-					soughtObject.transform.SetParent(null); // Освобождаем искомый объект из-под наперстка
-				}
+            if (!playerMadeChoice)
+            {
+                Debug.LogWarning("Mechanic5_5: выбор игрока не сделан вовремя. Механика завершена.");
+                mechanicActive = false;
+            }
 
-				// Добавляем эффект мигания
-				yield return StartCoroutine(BlinkThimbles(2, 0.3f));
+            if (!mechanicActive)
+            {
+                EndMechanic();
+                yield break;
+            }
 
-				DestroyThimbles(); // Удаляем все Thimble после мигания
-				break;
-			}
-			else
-			{
-				DestroyThimbles(); // Удаляем Thimble при каждой попытке, если меньше трех правильных ответов
-			}
+            if (correctChoices >= repetitions)
+            {
+                if (soughtObject != null)
+                    soughtObject.transform.SetParent(null);
 
-			yield return new WaitForSeconds(1f);
-		}
+                yield return StartCoroutine(BlinkThimbles(2, 0.3f));
+                DestroyThimbles();
+                break;
+            }
+            else
+            {
+                DestroyThimbles();
+            }
 
-		// Появление слабого места после трёх успешных раундов
-		if (mechanicActive && correctChoices >= repetitions)
-		{
-			TransformSoughtObjectToWeakSpot();
-			yield return new WaitUntil(() => mechanicActive == false);
-		}
-		else
-		{
-			Debug.LogWarning("Механика была остановлена до появления слабого места.");
-		}
-	}
-	
+            yield return new WaitForSeconds(1f);
+        }
+
+        if (mechanicActive && correctChoices >= repetitions)
+        {
+            TransformSoughtObjectToWeakSpot();
+            yield return new WaitUntil(() => mechanicActive == false);
+        }
+        else
+        {
+            Debug.LogWarning("Mechanic5_5: механика завершена до появления weak spot.");
+        }
+    }
+
     private IEnumerator MoveBossToCenter()
-	{
-		// Получаем размеры босса
-		Renderer bossRenderer = boss.GetComponent<Renderer>();
-		float bossHalfWidth = bossRenderer.bounds.extents.x;
-		float bossHalfHeight = bossRenderer.bounds.extents.y;
+    {
+        Renderer bossRenderer = boss.GetComponent<Renderer>();
+        if (bossRenderer == null || Camera.main == null)
+            yield break;
 
-		// Рассчитываем границы видимого экрана
-		float screenHalfWidth = Camera.main.orthographicSize * Camera.main.aspect;
-		float screenHalfHeight = Camera.main.orthographicSize;
+        float bossHalfWidth = bossRenderer.bounds.extents.x;
+        float bossHalfHeight = bossRenderer.bounds.extents.y;
 
-		// Целевая позиция с учётом границ экрана
-		Vector2 targetPosition = new Vector2(
-			Mathf.Clamp(0, -screenHalfWidth + bossHalfWidth, screenHalfWidth - bossHalfWidth),
-			Mathf.Clamp(Camera.main.orthographicSize - bossHalfHeight, -screenHalfHeight + bossHalfHeight, screenHalfHeight - bossHalfHeight)
-		);
+        float screenHalfWidth = Camera.main.orthographicSize * Camera.main.aspect;
+        float screenHalfHeight = Camera.main.orthographicSize;
 
-		// Линейное перемещение босса к целевой позиции
-		Vector2 startPosition = boss.position;
-		float elapsedTime = 0f;
-		float moveDuration = 2f;
+        Vector2 targetPosition = new Vector2(
+            Mathf.Clamp(0f, -screenHalfWidth + bossHalfWidth, screenHalfWidth - bossHalfWidth),
+            Mathf.Clamp(Camera.main.orthographicSize - bossHalfHeight, -screenHalfHeight + bossHalfHeight, screenHalfHeight - bossHalfHeight)
+        );
 
-		while (elapsedTime < moveDuration)
-		{
-			boss.position = Vector2.Lerp(startPosition, targetPosition, elapsedTime / moveDuration);
-			elapsedTime += Time.deltaTime;
-			yield return null;
-		}
+        Vector2 startPosition = boss.position;
+        float elapsedTime = 0f;
+        float moveDuration = 2f;
 
-		// Устанавливаем точную финальную позицию
-		boss.position = targetPosition;
-	}
+        while (elapsedTime < moveDuration)
+        {
+            boss.position = Vector2.Lerp(startPosition, targetPosition, elapsedTime / moveDuration);
+            elapsedTime += Time.deltaTime;
+            yield return null;
+        }
+
+        boss.position = targetPosition;
+    }
 
     private void CreateThimbles()
-	{
-		thimbles.Clear();
-		thimblePositions.Clear();
+    {
+        thimbles.Clear();
+        thimblePositions.Clear();
 
-		float spacing = 3f;
-		int centralThimbleIndex = 1; // Центрируем искомый объект в начале игры
+        float spacing = 3f;
+        int centralThimbleIndex = 1;
 
-		for (int i = -1; i <= 1; i++)
-		{
-			Vector2 position = new Vector2(i * spacing, -1);
-			thimblePositions.Add(position);
+        for (int i = -1; i <= 1; i++)
+        {
+            Vector2 position = new Vector2(i * spacing, -1f);
+            thimblePositions.Add(position);
 
-			GameObject thimble = Instantiate(thimblePrefab, position, Quaternion.identity);
-			Thimble thimbleScript = thimble.AddComponent<Thimble>();
-			
-			bool isCorrect = (i + 1) == centralThimbleIndex; // Ставим объект под центральный наперсток
-			thimbleScript.Initialize(this, isCorrect);
+            GameObject thimble = Instantiate(thimblePrefab, position, Quaternion.identity);
 
-			if (isCorrect)
-			{
-				soughtObject = Instantiate(soughtPrefab, thimble.transform.position, Quaternion.identity);
-				soughtObject.transform.SetParent(thimble.transform);
-				soughtObject.SetActive(false); // Прячем искомый объект
-			}
+            Thimble thimbleScript = thimble.GetComponent<Thimble>();
+            if (thimbleScript == null)
+                thimbleScript = thimble.AddComponent<Thimble>();
 
-			thimbles.Add(thimble);
-		}
-		
-		// Проигрываем звук появления
-		if (audioSource != null && thimbleAppearClip != null)
-		{
-			audioSource.PlayOneShot(thimbleAppearClip);
-		}
+            bool isCorrect = (i + 1) == centralThimbleIndex;
+            thimbleScript.Initialize(this, isCorrect);
 
-		EnableThimbleInteraction(false);
-	}
+            thimbles.Add(thimble);
+        }
+
+        if (audioSource != null && thimbleAppearClip != null)
+            audioSource.PlayOneShot(thimbleAppearClip);
+
+        EnableThimbleInteraction(false);
+    }
 
     private IEnumerator CreateAndHideSoughtObject()
-	{
-		correctThimbleIndex = 1;
+    {
+        if (thimbles.Count < 3)
+            yield break;
 
-		// Устанавливаем начальную позицию ниже экрана
-		Vector3 startPosition = new Vector3(thimbles[correctThimbleIndex].transform.position.x, -Camera.main.orthographicSize - 1, 0);
-		soughtObject = Instantiate(soughtPrefab, startPosition, Quaternion.identity);
+        correctThimbleIndex = 1;
 
-		SpriteRenderer sr = soughtObject.GetComponent<SpriteRenderer>();
-		sr.sortingLayerName = "BehindThimble";
+        Vector3 startPosition = new Vector3(
+            thimbles[correctThimbleIndex].transform.position.x,
+            -Camera.main.orthographicSize - 1f,
+            0f
+        );
 
-		// Пауза на 1 секунду перед началом движения
-		yield return new WaitForSeconds(1f);
+        if (soughtObject != null)
+            Destroy(soughtObject);
 
-		// Целевая позиция - под наперстком
-		Vector3 targetPosition = thimbles[correctThimbleIndex].transform.position;
+        soughtObject = Instantiate(soughtPrefab, startPosition, Quaternion.identity);
 
-		// Перемещение снизу вверх
-		float moveDuration = 1f;
-		float elapsedTime = 0f;
+        SpriteRenderer sr = soughtObject.GetComponent<SpriteRenderer>();
+        if (sr != null)
+            sr.sortingLayerName = "BehindThimble";
 
-		while (elapsedTime < moveDuration)
-		{
-			soughtObject.transform.position = Vector3.Lerp(startPosition, targetPosition, elapsedTime / moveDuration);
-			elapsedTime += Time.deltaTime;
-			yield return null;
-		}
+        yield return new WaitForSeconds(1f);
 
-		// Закрепляем объект под наперстком
-		soughtObject.transform.SetParent(thimbles[correctThimbleIndex].transform);
-		soughtObject.SetActive(false);
-	}
+        Vector3 targetPosition = thimbles[correctThimbleIndex].transform.position;
+        float moveDuration = 1f;
+        float elapsedTime = 0f;
+
+        while (elapsedTime < moveDuration)
+        {
+            if (soughtObject == null)
+                yield break;
+
+            soughtObject.transform.position = Vector3.Lerp(startPosition, targetPosition, elapsedTime / moveDuration);
+            elapsedTime += Time.deltaTime;
+            yield return null;
+        }
+
+        if (soughtObject != null)
+        {
+            soughtObject.transform.position = targetPosition;
+            soughtObject.transform.SetParent(thimbles[correctThimbleIndex].transform);
+            soughtObject.SetActive(false);
+        }
+    }
 
     private IEnumerator ShuffleThimbles()
-	{
-		soughtObject.SetActive(true);
+    {
+        if (soughtObject == null)
+            yield break;
 
-		int shuffleCount = 5;
-		float shuffleDuration = 0.5f;
-		
-		// Включаем луп звука перемешивания
-		if (audioSource != null && shuffleLoopClip != null)
-		{
-			audioSource.clip = shuffleLoopClip;
-			audioSource.loop = true;
-			audioSource.Play();
-		}
+        soughtObject.SetActive(true);
 
-		for (int i = 0; i < shuffleCount; i++)
-		{
-			int indexA = Random.Range(0, thimbles.Count);
-			int indexB = (indexA + 1) % thimbles.Count;
+        int shuffleCount = 5;
+        float shuffleDuration = 0.5f;
 
-			yield return StartCoroutine(SwapThimbles(indexA, indexB, shuffleDuration));
-			shuffleDuration *= 0.9f;
-		}
-		
-		    // Останавливаем звук перемешивания
-		if (audioSource != null && audioSource.clip == shuffleLoopClip)
-		{
-			audioSource.loop = false;
-			audioSource.Stop();
-		}
-		Debug.Log("Перемешивание завершено. Правильный наперсток находится в позиции: " + soughtObject.transform.position);
-	}
+        if (audioSource != null && shuffleLoopClip != null)
+        {
+            audioSource.clip = shuffleLoopClip;
+            audioSource.loop = true;
+            audioSource.Play();
+        }
 
-	private IEnumerator SwapThimbles(int indexA, int indexB, float duration)
-	{
-		Vector2 startPosA = thimbles[indexA].transform.position;
-		Vector2 startPosB = thimbles[indexB].transform.position;
+        for (int i = 0; i < shuffleCount; i++)
+        {
+            int indexA = Random.Range(0, thimbles.Count);
+            int indexB = (indexA + 1) % thimbles.Count;
 
-		float elapsed = 0f;
+            yield return StartCoroutine(SwapThimbles(indexA, indexB, shuffleDuration));
+            shuffleDuration *= 0.9f;
+        }
 
-		while (elapsed < duration)
-		{
-			thimbles[indexA].transform.position = Vector2.Lerp(startPosA, startPosB, elapsed / duration);
-			thimbles[indexB].transform.position = Vector2.Lerp(startPosB, startPosA, elapsed / duration);
+        if (audioSource != null && audioSource.clip == shuffleLoopClip)
+        {
+            audioSource.loop = false;
+            audioSource.Stop();
+        }
+    }
 
-			elapsed += Time.deltaTime;
-			yield return null;
-		}
+    private IEnumerator SwapThimbles(int indexA, int indexB, float duration)
+    {
+        Vector2 startPosA = thimbles[indexA].transform.position;
+        Vector2 startPosB = thimbles[indexB].transform.position;
+        float elapsed = 0f;
 
-		// Устанавливаем позиции окончательно
-		thimbles[indexA].transform.position = startPosB;
-		thimbles[indexB].transform.position = startPosA;
+        while (elapsed < duration)
+        {
+            if (thimbles[indexA] == null || thimbles[indexB] == null)
+                yield break;
 
-		// Перемещаем правильный наперсток, если он участвовал в перемешивании, но не меняем его объект
-		if (thimbles[indexA] == thimbles[correctThimbleIndex])
-		{
-			correctThimbleIndex = indexB;
-		}
-		else if (thimbles[indexB] == thimbles[correctThimbleIndex])
-		{
-			correctThimbleIndex = indexA;
-		}
-	}
+            thimbles[indexA].transform.position = Vector2.Lerp(startPosA, startPosB, elapsed / duration);
+            thimbles[indexB].transform.position = Vector2.Lerp(startPosB, startPosA, elapsed / duration);
 
-	public void SetPlayerChoice(bool isCorrect)
-	{
-		if (isCorrect)
-		{
-			Debug.Log("Правильный выбор!");
-			correctChoices++;
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
 
-			// Проигрываем звук правильного ответа
-			if (audioSource != null && correctChoiceClip != null)
-			{
-				audioSource.PlayOneShot(correctChoiceClip);
-			}
-		}
-		else
-		{
-			Debug.Log("Неправильный выбор. Механика завершена.");
-			mechanicActive = false;
+        thimbles[indexA].transform.position = startPosB;
+        thimbles[indexB].transform.position = startPosA;
 
-			// Проигрываем звук неправильного ответа
-			if (audioSource != null && wrongChoiceClip != null)
-			{
-				audioSource.PlayOneShot(wrongChoiceClip);
-			}
-		}
+        if (correctThimbleIndex == indexA)
+            correctThimbleIndex = indexB;
+        else if (correctThimbleIndex == indexB)
+            correctThimbleIndex = indexA;
+    }
 
-		playerMadeChoice = true;
-		EnableThimbleInteraction(false);
-	}
+    public void SetPlayerChoice(bool isCorrect)
+    {
+        if (!mechanicActive)
+            return;
+
+        if (isCorrect)
+        {
+            correctChoices++;
+            Debug.Log($"Mechanic5_5: правильный выбор. Счет = {correctChoices}");
+
+            if (audioSource != null && correctChoiceClip != null)
+                audioSource.PlayOneShot(correctChoiceClip);
+        }
+        else
+        {
+            mechanicActive = false;
+            Debug.Log("Mechanic5_5: неправильный выбор. Механика завершена.");
+
+            if (audioSource != null && wrongChoiceClip != null)
+                audioSource.PlayOneShot(wrongChoiceClip);
+        }
+
+        playerMadeChoice = true;
+        EnableThimbleInteraction(false);
+    }
 
     private void EnableThimbleInteraction(bool enable)
     {
         foreach (GameObject thimble in thimbles)
         {
-            if (thimble != null)
-            {
-                var collider = thimble.GetComponent<Collider2D>();
-                if (collider != null)
-                {
-                    collider.enabled = enable;
-                }
-            }
+            if (thimble == null)
+                continue;
+
+            Collider2D collider = thimble.GetComponent<Collider2D>();
+            if (collider != null)
+                collider.enabled = enable;
         }
     }
 
-	private void EndMechanic()
-	{
-		DestroyThimbles();
-		if (correctChoices < repetitions && soughtObject != null) 
-		{
-			Destroy(soughtObject); // Удаляем искомый объект только если механика завершена из-за ошибки
-		}
-		StopAllCoroutines();
-	}
+    private void EndMechanic()
+    {
+        DestroyThimbles();
+
+        if (correctChoices < repetitions && soughtObject != null)
+            Destroy(soughtObject);
+
+        soughtObject = null;
+        StopAllCoroutines();
+    }
 
     private void DestroyThimbles()
     {
         foreach (GameObject thimble in thimbles)
         {
-            if (thimble != null) Destroy(thimble);
+            if (thimble != null)
+                Destroy(thimble);
         }
+
         thimbles.Clear();
         thimblePositions.Clear();
     }
 
-	private void TransformSoughtObjectToWeakSpot()
-	{
-		if (soughtObject == null) return;
+    private void TransformSoughtObjectToWeakSpot()
+    {
+        if (soughtObject == null)
+            return;
 
-		Vector2 weakSpotPosition = soughtObject.transform.position;
+        Vector2 weakSpotPosition = soughtObject.transform.position;
+        Destroy(soughtObject);
+        soughtObject = null;
 
-		Destroy(soughtObject); // Удаляем искомый объект и создаём слабое место в его позиции
-		GameObject weakSpot = Instantiate(weakSpotPrefab, weakSpotPosition, Quaternion.identity);
-		WeakSpot_2 weakSpotScript = weakSpot.GetComponent<WeakSpot_2>();
+        GameObject weakSpot = Instantiate(weakSpotPrefab, weakSpotPosition, Quaternion.identity);
+        WeakSpot_2 weakSpotScript = weakSpot.GetComponent<WeakSpot_2>();
 
-		weakSpotScript.OnDestroyed += () =>
-		{
-			bossController.TakeDamage(1);
-			mechanicActive = false;
-		};
+        if (weakSpotScript == null)
+        {
+            Debug.LogError("Mechanic5_5: на weakSpotPrefab нет WeakSpot_2.");
+            return;
+        }
 
-		Debug.Log("Слабое место создано в позиции: " + weakSpotPosition);
-	}
-	
-	private IEnumerator BlinkThimbles(int blinkCount, float blinkDuration)
-	{
-		for (int i = 0; i < blinkCount; i++)
-		{
-			foreach (var thimble in thimbles)
-			{
-				if (thimble != null)
-				{
-					var renderer = thimble.GetComponent<SpriteRenderer>();
-					if (renderer != null)
-					{
-						renderer.enabled = false; // Скрыть
-					}
-				}
-			}
-			yield return new WaitForSeconds(blinkDuration);
+        weakSpotScript.OnDestroyed += () =>
+        {
+            if (bossController != null)
+                bossController.TakeDamage(1);
 
-			foreach (var thimble in thimbles)
-			{
-				if (thimble != null)
-				{
-					var renderer = thimble.GetComponent<SpriteRenderer>();
-					if (renderer != null)
-					{
-						renderer.enabled = true; // Показать
-					}
-				}
-			}
-			yield return new WaitForSeconds(blinkDuration);
-		}
-	}
+            mechanicActive = false;
+        };
+
+        Debug.Log("Mechanic5_5: weak spot создан.");
+    }
+
+    private IEnumerator BlinkThimbles(int blinkCount, float blinkDuration)
+    {
+        for (int i = 0; i < blinkCount; i++)
+        {
+            foreach (GameObject thimble in thimbles)
+            {
+                if (thimble == null) continue;
+
+                SpriteRenderer renderer = thimble.GetComponent<SpriteRenderer>();
+                if (renderer != null)
+                    renderer.enabled = false;
+            }
+
+            yield return new WaitForSeconds(blinkDuration);
+
+            foreach (GameObject thimble in thimbles)
+            {
+                if (thimble == null) continue;
+
+                SpriteRenderer renderer = thimble.GetComponent<SpriteRenderer>();
+                if (renderer != null)
+                    renderer.enabled = true;
+            }
+
+            yield return new WaitForSeconds(blinkDuration);
+        }
+    }
+
+    private void CleanupObjects()
+    {
+        DestroyThimbles();
+
+        if (soughtObject != null)
+            Destroy(soughtObject);
+
+        soughtObject = null;
+    }
 }

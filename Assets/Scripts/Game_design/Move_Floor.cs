@@ -58,6 +58,9 @@ public class Move_Floor : MonoBehaviour
         speed = 3f; // Сбрасываем скорость
         transform.position = initialPosition; // Возвращаем объект на начальную позицию
         StartMovement(); // Перезапускаем движение
+        
+        Debug.Log("Start_Design restarted");
+        Debug.Log("Move_Floor restarted: " + gameObject.name);
     }
 
     private void OnDisable()

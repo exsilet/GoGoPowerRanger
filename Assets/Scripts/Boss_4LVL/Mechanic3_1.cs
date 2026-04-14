@@ -1,121 +1,140 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 
 public class Mechanic3_1 : MonoBehaviour, IBossMechanic
 {
-    public GameObject wallPrefab; // Префаб для стены
-    public GameObject gapPrefab; // Префаб для прохода
-    public float flashInterval = 0.3f; // Интервал мигания
-    public float wallFallSpeed = 5f; // Скорость падения стен
-    public float wallDestroyY = -10f; // Y-координата, ниже которой стены удаляются
-    public float gapWidth = 2f; // Ширина прохода между стенами
-    public float minGapOffset = 0.1f; // Минимальное смещение от центра (доля ширины экрана)
-    public float maxGapOffset = 0.9f; // Максимальное смещение от центра (доля ширины экрана)
+    [SerializeField] private GameObject wallPrefab;
+    [SerializeField] private float flashInterval = 0.3f;
+    [SerializeField] private float wallFallSpeed = 5f;
+    [SerializeField] private float wallDestroyY = -10f;
+    [SerializeField] private float gapWidth = 2f;
+    [SerializeField] private int fallCountMin = 5;
+    [SerializeField] private int fallCountMax = 8;
+    [SerializeField] private float delayBetweenFalls = 1.8f;
+    [SerializeField] private float spawnOffsetY = 1.5f;
+    [SerializeField] private float wallThickness = 1.2f;
 
     private SpriteRenderer spriteRenderer;
+    private readonly List<GameObject> activeWalls = new List<GameObject>();
 
-    void Start()
+    private void Start()
     {
         spriteRenderer = GetComponent<SpriteRenderer>();
     }
 
     public IEnumerator Execute()
     {
-        Debug.Log("Механика 3_1 запущена.");
-
-        // 0. Босс встает на месте и мигает
-        yield return StartCoroutine(BossFlash());
-
-        // 1. Босс делается невидимым
-        SetVisibility(false);
-
-        // 2. Генерация и падение нескольких наборов стен с проходом
-        int fallCount = Random.Range(5, 10); // Количество падений
-        for (int i = 0; i < fallCount; i++)
+        if (wallPrefab == null)
         {
-            GenerateWallsWithGap();
-            yield return new WaitForSeconds(2.5f); // Интервал между падениями
+            Debug.LogError("Mechanic3_1: wallPrefab не назначен.");
+            yield break;
         }
 
-        // 3. Босс снова становится видимым
+        Debug.Log("Механика 3_1 запущена.");
+
+        yield return StartCoroutine(BossFlash());
+        SetVisibility(false);
+
+        int fallCount = Random.Range(fallCountMin, fallCountMax + 1);
+        for (int i = 0; i < fallCount; i++)
+        {
+            SpawnWallPairWithGap();
+            yield return new WaitForSeconds(delayBetweenFalls);
+        }
+
+        while (activeWalls.Count > 0)
+        {
+            activeWalls.RemoveAll(w => w == null);
+            yield return null;
+        }
+
         SetVisibility(true);
         Debug.Log("Механика 3_1 завершена.");
     }
 
     private IEnumerator BossFlash()
     {
-        // Босс мигает 2 раза
         for (int i = 0; i < 2; i++)
         {
-            spriteRenderer.enabled = false;
+            if (spriteRenderer != null)
+                spriteRenderer.enabled = false;
+
             yield return new WaitForSeconds(flashInterval);
-            spriteRenderer.enabled = true;
+
+            if (spriteRenderer != null)
+                spriteRenderer.enabled = true;
+
             yield return new WaitForSeconds(flashInterval);
         }
 
-        yield return new WaitForSeconds(1f); // Ждет 1 секунду после мигания
+        yield return new WaitForSeconds(0.5f);
     }
 
-    private void GenerateWallsWithGap()
-	{
-		// Определяем половину ширины экрана
-		float screenHalfWidth = Camera.main.orthographicSize * Camera.main.aspect;
+    private void SpawnWallPairWithGap()
+    {
+        Camera cam = Camera.main;
+        if (cam == null)
+        {
+            Debug.LogError("Mechanic3_1: Camera.main не найдена.");
+            return;
+        }
 
-		// Определяем случайное положение для центра прохода
-		float gapCenterX = Random.Range(-screenHalfWidth + gapWidth / 2, screenHalfWidth - gapWidth / 2);
+        float screenHalfWidth = cam.orthographicSize * cam.aspect;
+        float topY = cam.orthographicSize + spawnOffsetY;
+        float fullWidth = screenHalfWidth * 2f;
 
-		// Создаём проход (gap)
-		Vector3 gapPos = new Vector3(gapCenterX, Camera.main.orthographicSize + 1, 0);
-		GameObject gap = Instantiate(gapPrefab, gapPos, Quaternion.identity);
-		gap.transform.localScale = new Vector3(gapWidth, 1, 1);
+        float minGapCenter = -screenHalfWidth + gapWidth * 0.5f;
+        float maxGapCenter = screenHalfWidth - gapWidth * 0.5f;
+        float gapCenterX = Random.Range(minGapCenter, maxGapCenter);
 
-		// Определяем размеры прохода
-		float actualGapWidth = gap.GetComponent<Renderer>().bounds.size.x;
+        float leftWidth = Mathf.Max(0f, gapCenterX - gapWidth * 0.5f + screenHalfWidth);
+        float rightWidth = Mathf.Max(0f, screenHalfWidth - (gapCenterX + gapWidth * 0.5f));
 
-		// Создаём левую стену
-		GameObject leftWall = Instantiate(wallPrefab);
-		float leftWallWidth = leftWall.GetComponent<Renderer>().bounds.size.x;
-		Vector3 leftWallPos = new Vector3(gapPos.x - actualGapWidth / 2 - leftWallWidth / 2, gapPos.y, 0);
-		leftWall.transform.position = leftWallPos;
+        if (leftWidth > 0.05f)
+        {
+            Vector3 leftPos = new Vector3(-screenHalfWidth + leftWidth * 0.5f, topY, 0f);
+            GameObject leftWall = Instantiate(wallPrefab, leftPos, Quaternion.identity);
+            leftWall.transform.localScale = new Vector3(leftWidth, wallThickness, 1f);
+            activeWalls.Add(leftWall);
+            StartCoroutine(FallAndDestroyWall(leftWall));
+        }
 
-		// Создаём правую стену
-		GameObject rightWall = Instantiate(wallPrefab);
-		float rightWallWidth = rightWall.GetComponent<Renderer>().bounds.size.x;
-		Vector3 rightWallPos = new Vector3(gapPos.x + actualGapWidth / 2 + rightWallWidth / 2, gapPos.y, 0);
-		rightWall.transform.position = rightWallPos;
-
-		// Запускаем падение всех объектов
-		StartCoroutine(FallAndDestroyWall(leftWall));
-		StartCoroutine(FallAndDestroyWall(rightWall));
-		StartCoroutine(FallAndDestroyWall(gap));
-	}
+        if (rightWidth > 0.05f)
+        {
+            Vector3 rightPos = new Vector3(gapCenterX + gapWidth * 0.5f + rightWidth * 0.5f, topY, 0f);
+            GameObject rightWall = Instantiate(wallPrefab, rightPos, Quaternion.identity);
+            rightWall.transform.localScale = new Vector3(rightWidth, wallThickness, 1f);
+            activeWalls.Add(rightWall);
+            StartCoroutine(FallAndDestroyWall(rightWall));
+        }
+    }
 
     private IEnumerator FallAndDestroyWall(GameObject wall)
     {
-        while (wall.transform.position.y > wallDestroyY)
+        while (wall != null && wall.transform.position.y > wallDestroyY)
         {
-            // Перемещаем стену или проход вниз
             wall.transform.position += Vector3.down * wallFallSpeed * Time.deltaTime;
             yield return null;
         }
 
-        // Удаляем стену или проход, когда они выходят за нижнюю границу
-        Destroy(wall);
+        if (wall != null)
+        {
+            activeWalls.Remove(wall);
+            Destroy(wall);
+        }
     }
-	
-	private void SetVisibility(bool isVisible)
-	{
-		// Скрываем/показываем основной объект
-		spriteRenderer.enabled = isVisible;
 
-		// Скрываем/показываем все дочерние объекты
-		foreach (Transform child in transform)
-		{
-			SpriteRenderer childRenderer = child.GetComponent<SpriteRenderer>();
-			if (childRenderer != null)
-			{
-				childRenderer.enabled = isVisible;
-			}
-		}
-	}
+    private void SetVisibility(bool isVisible)
+    {
+        if (spriteRenderer != null)
+            spriteRenderer.enabled = isVisible;
+
+        foreach (Transform child in transform)
+        {
+            SpriteRenderer childRenderer = child.GetComponent<SpriteRenderer>();
+            if (childRenderer != null)
+                childRenderer.enabled = isVisible;
+        }
+    }
 }

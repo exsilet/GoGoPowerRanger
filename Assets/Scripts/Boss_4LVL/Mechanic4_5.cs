@@ -4,165 +4,166 @@ using UnityEngine;
 
 public class Mechanic4_5 : MonoBehaviour, IBossMechanic
 {
-    public GameObject weakSpotPrefab;
-    public GameObject[] colorObjects;
-    public float moveSpeed = 5f;
-    public float flashInterval = 1f;
-    public int maxRounds = 3;
+    [Header("Main")]
+    [SerializeField] private GameObject weakSpotPrefab;
+    [SerializeField] private GameObject[] colorObjects;
+    [SerializeField] private float moveSpeed = 5f;
+    [SerializeField] private float flashInterval = 1f;
+    [SerializeField] private int maxRounds = 3;
+    [SerializeField] private float playerChoiceTimeout = 8f;
+
+    [Header("Audio")]
+    [SerializeField] private AudioSource colorFlashSound;
+    [SerializeField] private AudioSource audioSource;
+    [SerializeField] private AudioClip correctChoiceClip;
+    [SerializeField] private AudioClip incorrectChoiceClip;
 
     private List<string> colorSequence;
     private List<string> playerSequence;
+    private readonly List<GameObject> spawnedColorObjects = new List<GameObject>();
+
     private Vector3[] spawnPositions;
     private int roundCount;
     private SpriteRenderer spriteRenderer;
+
     private bool isCollecting;
     private bool isRoundComplete;
-    private GameObject weakSpot;
-	private bool isWeakSpotDestroyed;
-	
-	[Header("Audio Settings")]
-	public AudioSource colorFlashSound; // Звук при смене цвета
-	[Header("Audio Settings - 2")]
-	public AudioSource audioSource;         // Источник звука
-	public AudioClip correctChoiceClip;     // Звук правильного выбора
-	public AudioClip incorrectChoiceClip;   // Звук неправильного выбора
+    private bool isWeakSpotDestroyed;
 
-    void Start()
+    private GameObject weakSpot;
+    private Transform eyeTransform;
+
+    private void Start()
     {
         spriteRenderer = GetComponent<SpriteRenderer>();
+        eyeTransform = transform.Find("Eye");
+
+        if (Camera.main == null)
+        {
+            Debug.LogError("Mechanic4_5: Camera.main не найдена.");
+            return;
+        }
+
+        float halfWidth = Camera.main.orthographicSize * Camera.main.aspect;
+        float halfHeight = Camera.main.orthographicSize;
+
         spawnPositions = new Vector3[]
         {
-            new Vector3(-Camera.main.orthographicSize * Camera.main.aspect + 1, -Camera.main.orthographicSize + 1, 0),
-            new Vector3(-Camera.main.orthographicSize * Camera.main.aspect / 3, -Camera.main.orthographicSize + 1, 0),
-            new Vector3(Camera.main.orthographicSize * Camera.main.aspect / 3, -Camera.main.orthographicSize + 1, 0),
-            new Vector3(Camera.main.orthographicSize * Camera.main.aspect - 1, -Camera.main.orthographicSize + 1, 0)
+            new Vector3(-halfWidth + 1f, -halfHeight + 1f, 0f),
+            new Vector3(-halfWidth / 3f, -halfHeight + 1f, 0f),
+            new Vector3( halfWidth / 3f, -halfHeight + 1f, 0f),
+            new Vector3( halfWidth - 1f, -halfHeight + 1f, 0f)
         };
     }
 
     public IEnumerator Execute()
     {
-        Debug.Log("Механика 5_1 запущена.");
+        if (weakSpotPrefab == null || colorObjects == null || colorObjects.Length < 4)
+        {
+            Debug.LogError("Mechanic4_5: не назначены weakSpotPrefab/colorObjects.");
+            yield break;
+        }
+
+        Debug.Log("Механика 4_5 запущена.");
+
         roundCount = 0;
-		isWeakSpotDestroyed = false;
-		
-		// Делаем дочерний объект невидимым
-		Transform childObject = transform.Find("Eye"); // Замените "ChildObjectName" на имя дочернего объекта
-		if (childObject != null)
-		{
-			Renderer childRenderer = childObject.GetComponent<Renderer>();
-			if (childRenderer != null)
-			{
-				childRenderer.enabled = false; // Отключаем отображение
-			}
-		}
+        isWeakSpotDestroyed = false;
+        weakSpot = null;
+
+        SetEyeVisible(false);
 
         yield return StartCoroutine(MoveToCorner());
-        yield return new WaitForSeconds(1f);
+        yield return new WaitForSeconds(0.5f);
 
         while (roundCount < maxRounds)
         {
             colorSequence = GenerateRandomColorSequence();
-            yield return StartCoroutine(FlashSequence(colorSequence));
+            playerSequence = new List<string>();
 
-            yield return new WaitForSeconds(1f);
+            yield return StartCoroutine(FlashSequence(colorSequence));
+            yield return new WaitForSeconds(0.5f);
 
             SpawnColorObjects();
-
             yield return StartCoroutine(FlashColorObjects());
 
             isCollecting = true;
             isRoundComplete = false;
-            playerSequence = new List<string>();
 
-            // Ожидаем завершения раунда (либо правильная последовательность, либо ошибка)
-            while (isCollecting && !isRoundComplete)
+            float elapsed = 0f;
+            while (isCollecting && !isRoundComplete && elapsed < playerChoiceTimeout)
             {
+                elapsed += Time.deltaTime;
                 yield return null;
+            }
+
+            if (elapsed >= playerChoiceTimeout)
+            {
+                Debug.LogWarning("Mechanic4_5: timeout выбора игрока.");
+                isCollecting = false;
+                isRoundComplete = false;
             }
 
             if (!isRoundComplete)
             {
-                Debug.Log("Механика завершена из-за ошибки игрока.");
+                Debug.Log("Механика 4_5 завершена из-за ошибки игрока или timeout.");
                 RemoveAllColorObjects();
-				
-				if (childObject != null)
-				{
-					Renderer childRenderer = childObject.GetComponent<Renderer>();
-					if (childRenderer != null)
-					{
-						childRenderer.enabled = true; // Отключаем отображение
-					}
-				}
+                SetEyeVisible(true);
                 yield break;
             }
 
-            Debug.Log("Раунд завершён успешно!");
+            Debug.Log($"Раунд {roundCount + 1} завершён успешно.");
             roundCount++;
             RemoveAllColorObjects();
 
-            yield return new WaitForSeconds(1f);
+            yield return new WaitForSeconds(0.5f);
 
             if (roundCount >= maxRounds)
             {
-                Debug.Log("Все 3 раунда завершены успешно. Появляется слабое место.");
+                Debug.Log("Все раунды завершены успешно. Появляется weak spot.");
                 SpawnWeakSpot();
-				
-				if (childObject != null)
-				{
-					Renderer childRenderer = childObject.GetComponent<Renderer>();
-					if (childRenderer != null)
-					{
-						childRenderer.enabled = true; // Отключаем отображение
-					}
-				}
-				
-				// Ожидаем, пока слабое место не будет разрушено
-                while (!isWeakSpotDestroyed)
-                {
-                    yield return null;
-                }
+                SetEyeVisible(true);
 
-                Debug.Log("Слабое место уничтожено, механика завершена.");
+                while (!isWeakSpotDestroyed)
+                    yield return null;
+
+                Debug.Log("Weak spot уничтожен. Механика завершена.");
                 yield break;
             }
         }
 
-        Debug.Log("Механика 5_1 завершена.");
-		if (childObject != null)
-		{
-			Renderer childRenderer = childObject.GetComponent<Renderer>();
-			if (childRenderer != null)
-			{
-				childRenderer.enabled = true; // Отключаем отображение
-			}
-		}
+        SetEyeVisible(true);
+        Debug.Log("Механика 4_5 завершена.");
     }
 
     private IEnumerator MoveToCorner()
-	{
-		// Получаем размеры объекта через Renderer (для учёта границ)
-		Renderer renderer = GetComponent<Renderer>();
-		float objectWidth = renderer.bounds.extents.x; // Половина ширины объекта
-		float objectHeight = renderer.bounds.extents.y; // Половина высоты объекта
+    {
+        if (Camera.main == null)
+            yield break;
 
-		// Рассчитываем границы видимого экрана
-		float screenHalfWidth = Camera.main.orthographicSize * Camera.main.aspect;
-		float screenHalfHeight = Camera.main.orthographicSize;
+        Renderer rend = GetComponent<Renderer>();
+        if (rend == null)
+            yield break;
 
-		// Устанавливаем целевую позицию с учётом границ экрана и размеров объекта
-		Vector3 targetPosition = new Vector3(
-			Mathf.Clamp(screenHalfWidth - objectWidth, -screenHalfWidth + objectWidth, screenHalfWidth - objectWidth),
-			Mathf.Clamp(screenHalfHeight - objectHeight, -screenHalfHeight + objectHeight, screenHalfHeight - objectHeight),
-			0
-		);
+        float objectWidth = rend.bounds.extents.x;
+        float objectHeight = rend.bounds.extents.y;
 
-		// Двигаем объект к целевой позиции
-		while (Vector3.Distance(transform.position, targetPosition) > 0.1f)
-		{
-			transform.position = Vector3.MoveTowards(transform.position, targetPosition, moveSpeed * Time.deltaTime);
-			yield return null;
-		}
-	}
+        float screenHalfWidth = Camera.main.orthographicSize * Camera.main.aspect;
+        float screenHalfHeight = Camera.main.orthographicSize;
+
+        Vector3 targetPosition = new Vector3(
+            Mathf.Clamp(screenHalfWidth - objectWidth, -screenHalfWidth + objectWidth, screenHalfWidth - objectWidth),
+            Mathf.Clamp(screenHalfHeight - objectHeight, -screenHalfHeight + objectHeight, screenHalfHeight - objectHeight),
+            0f
+        );
+
+        while (Vector3.Distance(transform.position, targetPosition) > 0.1f)
+        {
+            transform.position = Vector3.MoveTowards(transform.position, targetPosition, moveSpeed * Time.deltaTime);
+            yield return null;
+        }
+
+        transform.position = targetPosition;
+    }
 
     private List<string> GenerateRandomColorSequence()
     {
@@ -173,9 +174,7 @@ public class Mechanic4_5 : MonoBehaviour, IBossMechanic
         {
             string color = colors[Random.Range(0, colors.Length)];
             if (!sequence.Contains(color))
-            {
                 sequence.Add(color);
-            }
         }
 
         return sequence;
@@ -185,175 +184,187 @@ public class Mechanic4_5 : MonoBehaviour, IBossMechanic
     {
         foreach (string color in sequence)
         {
-            SetColor(color);
-			
-			// Воспроизводим звук, если он задан
-			if (colorFlashSound != null)
-			{
-				colorFlashSound.Play();
-			}
-			
+            SetBossColor(color);
+
+            if (colorFlashSound != null)
+                colorFlashSound.Play();
+
             yield return new WaitForSeconds(flashInterval);
         }
 
-        spriteRenderer.color = Color.white;
+        if (spriteRenderer != null)
+            spriteRenderer.color = Color.white;
     }
 
-    private void SetColor(string color)
+    private void SetBossColor(string color)
     {
+        if (spriteRenderer == null)
+            return;
+
         switch (color)
         {
             case "Red": spriteRenderer.color = Color.red; break;
             case "Blue": spriteRenderer.color = Color.blue; break;
             case "Yellow": spriteRenderer.color = Color.yellow; break;
             case "Black": spriteRenderer.color = Color.black; break;
+            default: spriteRenderer.color = Color.white; break;
         }
     }
 
-	private List<GameObject> spawnedColorObjects = new List<GameObject>(); // Список для хранения созданных объектов
+    private void SpawnColorObjects()
+    {
+        RemoveAllColorObjects();
 
-	private void SpawnColorObjects()
-	{
-		string[] colors = { "Red", "Blue", "Yellow", "Black" };
-		for (int i = 0; i < colorObjects.Length; i++)
-		{
-			GameObject obj = Instantiate(colorObjects[i], spawnPositions[i], Quaternion.identity);
-			obj.SetActive(false); // Сначала делаем объекты неактивными
-			SetObjectColor(obj, colors[i]);
-			spawnedColorObjects.Add(obj); // Добавляем объект в список
-		}
+        string[] colors = { "Red", "Blue", "Yellow", "Black" };
 
-		StartCoroutine(FlashColorObjects()); // Запускаем мигание объектов перед активацией
-	}
-	
-	
+        for (int i = 0; i < colorObjects.Length && i < spawnPositions.Length; i++)
+        {
+            GameObject obj = Instantiate(colorObjects[i], spawnPositions[i], Quaternion.identity);
+            obj.SetActive(false);
+            SetObjectColor(obj, colors[i]);
+            spawnedColorObjects.Add(obj);
+        }
+    }
 
-	private IEnumerator FlashColorObjects()
-	{
-		// Отключаем коллайдеры перед миганием, чтобы игрок не мог взаимодействовать
-		foreach (GameObject obj in spawnedColorObjects)
-		{
-			Collider2D collider = obj.GetComponent<Collider2D>();
-			if (collider != null)
-			{
-				collider.enabled = false;
-			}
-		}
+    private IEnumerator FlashColorObjects()
+    {
+        foreach (GameObject obj in spawnedColorObjects)
+        {
+            if (obj == null) continue;
 
-		// Дважды мигаем созданными объектами
-		for (int i = 0; i < 2; i++)
-		{
-			foreach (GameObject obj in spawnedColorObjects)
-			{
-				obj.SetActive(false);
-			}
-			yield return new WaitForSeconds(0.3f);
+            Collider2D collider = obj.GetComponent<Collider2D>();
+            if (collider != null)
+                collider.enabled = false;
+        }
 
-			foreach (GameObject obj in spawnedColorObjects)
-			{
-				obj.SetActive(true);
-			}
-			yield return new WaitForSeconds(0.3f);
-		}
+        for (int i = 0; i < 2; i++)
+        {
+            foreach (GameObject obj in spawnedColorObjects)
+            {
+                if (obj != null)
+                    obj.SetActive(false);
+            }
 
-		// После мигания включаем коллайдеры, чтобы игрок мог взаимодействовать с объектами
-		foreach (GameObject obj in spawnedColorObjects)
-		{
-			Collider2D collider = obj.GetComponent<Collider2D>();
-			if (collider != null)
-			{
-				collider.enabled = true;
-			}
-		}
-	}
+            yield return new WaitForSeconds(0.3f);
+
+            foreach (GameObject obj in spawnedColorObjects)
+            {
+                if (obj != null)
+                    obj.SetActive(true);
+            }
+
+            yield return new WaitForSeconds(0.3f);
+        }
+
+        foreach (GameObject obj in spawnedColorObjects)
+        {
+            if (obj == null) continue;
+
+            Collider2D collider = obj.GetComponent<Collider2D>();
+            if (collider != null)
+                collider.enabled = true;
+        }
+    }
 
     private void SetObjectColor(GameObject obj, string color)
     {
+        if (obj == null) return;
+
         SpriteRenderer sr = obj.GetComponent<SpriteRenderer>();
-        if (sr != null)
+        if (sr == null) return;
+
+        switch (color)
         {
-            switch (color)
-            {
-                case "Red": sr.color = Color.red; break;
-                case "Blue": sr.color = Color.blue; break;
-                case "Yellow": sr.color = Color.yellow; break;
-                case "Black": sr.color = Color.black; break;
-            }
+            case "Red": sr.color = Color.red; break;
+            case "Blue": sr.color = Color.blue; break;
+            case "Yellow": sr.color = Color.yellow; break;
+            case "Black": sr.color = Color.black; break;
         }
     }
 
     public void OnColorObjectTouched(string colorName)
-	{
-		if (!isCollecting) return;
+    {
+        if (!isCollecting || playerSequence == null || colorSequence == null)
+            return;
 
-		playerSequence.Add(colorName);
-		Debug.Log($"Игрок выбрал цвет: {colorName}. Проверка с эталоном: {colorSequence[playerSequence.Count - 1]}");
+        playerSequence.Add(colorName);
 
-		if (playerSequence[playerSequence.Count - 1] != colorSequence[playerSequence.Count - 1])
-		{
-			// Проигрываем звук неправильного выбора
-			if (audioSource != null && incorrectChoiceClip != null)
-			{
-				audioSource.PlayOneShot(incorrectChoiceClip);
-			}
+        int currentIndex = playerSequence.Count - 1;
+        Debug.Log($"Игрок выбрал: {colorName}, ожидалось: {colorSequence[currentIndex]}");
 
-			Debug.Log("Ошибка в последовательности! Удаляем все цветные объекты.");
-			RemoveAllColorObjects();
-			isCollecting = false;
-			isRoundComplete = false;
-			return;
-		}
+        if (playerSequence[currentIndex] != colorSequence[currentIndex])
+        {
+            if (audioSource != null && incorrectChoiceClip != null)
+                audioSource.PlayOneShot(incorrectChoiceClip);
 
-		// Проигрываем звук правильного выбора
-		if (audioSource != null && correctChoiceClip != null)
-		{
-			audioSource.PlayOneShot(correctChoiceClip);
-		}
+            Debug.Log("Mechanic4_5: ошибка в последовательности.");
+            isCollecting = false;
+            isRoundComplete = false;
+            RemoveAllColorObjects();
+            return;
+        }
 
-		if (playerSequence.Count == colorSequence.Count)
-		{
-			Debug.Log("Последовательность собрана правильно!");
-			isCollecting = false;
-			isRoundComplete = true;
-		}
-	}
+        if (audioSource != null && correctChoiceClip != null)
+            audioSource.PlayOneShot(correctChoiceClip);
+
+        if (playerSequence.Count >= colorSequence.Count)
+        {
+            Debug.Log("Mechanic4_5: последовательность собрана правильно.");
+            isCollecting = false;
+            isRoundComplete = true;
+        }
+    }
 
     private void RemoveAllColorObjects()
-	{
-		foreach (GameObject obj in spawnedColorObjects)
-		{
-			Destroy(obj);
-		}
-		spawnedColorObjects.Clear(); // Очищаем список для следующего раунда
-	}
+    {
+        foreach (GameObject obj in spawnedColorObjects)
+        {
+            if (obj != null)
+                Destroy(obj);
+        }
 
-	private void SpawnWeakSpot()
-	{
-		if (weakSpot == null) // Проверка, чтобы избежать создания нескольких слабых мест
-		{
-			weakSpot = Instantiate(weakSpotPrefab, new Vector3(0, 0, 0), Quaternion.identity);
-			WeakSpot_1 weakSpotScript = weakSpot.GetComponent<WeakSpot_1>();
-			if (weakSpotScript != null)
-			{
-				weakSpotScript.OnDestroyed += OnWeakSpotDestroyed;
-			}
-		}
-	}
+        spawnedColorObjects.Clear();
+    }
 
-	private void OnWeakSpotDestroyed()
-	{
-		if (isWeakSpotDestroyed) return; // Проверка для предотвращения двойного урона
+    private void SpawnWeakSpot()
+    {
+        if (weakSpot != null)
+            return;
 
-		Debug.Log("Слабое место уничтожено! Босс получает урон.");
-		isWeakSpotDestroyed = true;
+        weakSpot = Instantiate(weakSpotPrefab, Vector3.zero, Quaternion.identity);
+        WeakSpot_1 weakSpotScript = weakSpot.GetComponent<WeakSpot_1>();
 
-		// Находим контроллер босса и наносим урон
-		BossController_2 bossController = FindObjectOfType<BossController_2>();
-		if (bossController != null)
-		{
-			bossController.TakeDamage(1);
-		}
-		
-		StopAllCoroutines();
-	}
+        if (weakSpotScript == null)
+        {
+            Debug.LogError("Mechanic4_5: на weakSpotPrefab нет WeakSpot_1.");
+            return;
+        }
+
+        weakSpotScript.OnDestroyed += OnWeakSpotDestroyed;
+    }
+
+    private void OnWeakSpotDestroyed()
+    {
+        if (isWeakSpotDestroyed)
+            return;
+
+        isWeakSpotDestroyed = true;
+        Debug.Log("Mechanic4_5: weak spot уничтожен.");
+
+        BossController_2 bossController = FindObjectOfType<BossController_2>();
+        if (bossController != null)
+            bossController.TakeDamage(1);
+
+        StopAllCoroutines();
+    }
+
+    private void SetEyeVisible(bool visible)
+    {
+        if (eyeTransform == null)
+            return;
+
+        Renderer eyeRenderer = eyeTransform.GetComponent<Renderer>();
+        if (eyeRenderer != null)
+            eyeRenderer.enabled = visible;
+    }
 }

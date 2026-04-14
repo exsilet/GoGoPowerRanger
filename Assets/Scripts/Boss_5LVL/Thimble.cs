@@ -5,20 +5,18 @@ public class Thimble : MonoBehaviour
     private Mechanic5_5 mechanic;
     private bool isCorrectThimble;
 
-    // Инициализация наперстка, задаем, правильный ли это наперсток
-    public void Initialize(Mechanic5_5 mechanic, bool isCorrect)
+    public void Initialize(Mechanic5_5 mechanicRef, bool isCorrect)
     {
-        this.mechanic = mechanic;
+        mechanic = mechanicRef;
         isCorrectThimble = isCorrect;
     }
 
-    // Метод для обработки столкновения с игроком
     private void OnTriggerEnter2D(Collider2D collision)
     {
+        if (mechanic == null)
+            return;
+
         if (collision.CompareTag("Player"))
-        {
-            // Сообщаем основной механике, был ли выбран правильный наперсток
             mechanic.SetPlayerChoice(isCorrectThimble);
-        }
     }
 }

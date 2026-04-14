@@ -208,6 +208,14 @@ public class LevelManager : MonoBehaviour
         YG2.InterstitialAdvShow();
     }
     
+    public AudioSource GetCurrentLevelAudio()
+    {
+        if (currentLevelClone == null)
+            return null;
+
+        return currentLevelClone.GetComponent<AudioSource>();
+    }
+    
     private void SaveInitialPositions()
     {
         initialPositions[player] = player.transform.position;

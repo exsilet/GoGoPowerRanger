@@ -45,6 +45,9 @@ public class Start_Design : MonoBehaviour
         transform.position = initialPosition;
         StartCoroutine(MoveObstacle()); // Перезапускаем корутину
 		EnableRenderers();
+        
+        Debug.Log("Start_Design restarted");
+        Debug.Log("Move_Floor restarted: " + gameObject.name);
     }
 	
 	private void DisableRenderers()

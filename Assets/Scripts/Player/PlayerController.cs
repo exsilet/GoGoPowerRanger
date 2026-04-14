@@ -84,7 +84,7 @@ public class PlayerController : MonoBehaviour
 
     void Update()
 	{
-		if (isControlDisabled || Time.timeScale == 0f)
+		if (isControlDisabled)
 			return;
 		
 		if (isControlDisabled) return;
@@ -334,6 +334,13 @@ public class PlayerController : MonoBehaviour
 		isControlDisabled = true;
 		isBoosting = false;
 		targetPosition = transform.position;
+		
+		Rigidbody2D rb = GetComponent<Rigidbody2D>();
+		if (rb != null)
+		{
+			rb.velocity = Vector2.zero;
+			rb.angularVelocity = 0f;
+		}
 
 		if (disableControlCoroutine != null)
 		{
@@ -347,6 +354,7 @@ public class PlayerController : MonoBehaviour
 		isControlDisabled = false;
 		isBoosting = false;
 		targetPosition = transform.position;
+		transform.position = transform.position;
 	}
 	
 	private void TakeDamageFromCrack()
@@ -425,6 +433,7 @@ public class PlayerController : MonoBehaviour
 	    }
 
 	    yield return new WaitForSeconds(invincibleTime);
+	    playerSprite.color = new Color(1f, 1f, 1f, 1f);
 	    isInvincible = false;
     }
 	
@@ -437,7 +446,10 @@ public class PlayerController : MonoBehaviour
 		}
 
 		if (spriteRenderer != null)
+		{
 			spriteRenderer.enabled = true;
+			spriteRenderer.color = new Color(1f, 1f, 1f, 1f);
+		}
 	}
 	
 	void PlayDestructionSound()

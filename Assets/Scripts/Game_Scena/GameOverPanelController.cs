@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 using YG;
@@ -56,6 +57,14 @@ public class GameOverPanelController : MonoBehaviour
     private void OnRewardCallback()
     {
         Debug.Log("Реклама просмотрена полностью. Вторая попытка активирована.");
+        StartCoroutine(GrantSecondChanceDelayed());
+    }
+    
+    private IEnumerator GrantSecondChanceDelayed()
+    {
+        yield return null;
+        yield return new WaitForSecondsRealtime(0.05f);
+
         GrantSecondChance();
     }
 
@@ -88,26 +97,44 @@ public class GameOverPanelController : MonoBehaviour
         if (gameOverPanel != null)
             gameOverPanel.SetActive(false);
 
-        Time.timeScale = 1f;
-
-        GameObject levelObject = GameObject.FindGameObjectWithTag("LVL_1");
-        if (levelObject != null)
+        if (levelManager != null)
         {
-            AudioSource audio = levelObject.GetComponent<AudioSource>();
+            AudioSource audio = levelManager.GetCurrentLevelAudio();
             if (audio != null)
                 audio.UnPause();
         }
-
+        
         _menuButton.gameObject.SetActive(true);
 
         string deviceStr = YG2.envir.deviceType;
-        if (deviceStr == "desktop") _skillsPC.gameObject.SetActive(true);
-        else if (deviceStr == "mobile") _skillsMobile.gameObject.SetActive(true);
+        if (deviceStr == "desktop")
+            _skillsPC.gameObject.SetActive(true);
+        else
+            _skillsMobile.gameObject.SetActive(true);
 
+        if (levelManager != null && levelManager.gamePanel != null)
+        {
+            levelManager.gamePanel.SetActive(true);
+
+            foreach (Transform child in levelManager.gamePanel.transform)
+            {
+                child.gameObject.SetActive(true);
+            }
+        }
+        
         if (pauseMenu != null)
             pauseMenu.ResumeGame();
 
+        Rigidbody2D rb = playerController != null ? playerController.GetComponent<Rigidbody2D>() : null;
+        if (rb != null)
+        {
+            rb.velocity = Vector2.zero;
+            rb.angularVelocity = 0f;
+            rb.WakeUp();
+        }
+        
         YG2.GameplayStart();
+        Debug.Log("After revive: timeScale = " + Time.timeScale);
     }
 
     private void OnMainMenuClicked()
