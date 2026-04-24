@@ -15,6 +15,7 @@ public class GameOverPanelController : MonoBehaviour
     public Button pauseButton;
     public Sprite icon1;
     public Sprite icon5;
+    public Image RewardIcon;
     public GameObject gameOverPanel;
     private bool isSecondChance = false;
     private PauseMenuController pauseMenuController;
@@ -158,9 +159,15 @@ public class GameOverPanelController : MonoBehaviour
     private void UpdateRetryButton()
     {
         if (isSecondChance)
+        {
             retryButton.GetComponent<Image>().sprite = icon5;
+            RewardIcon.gameObject.SetActive(false);
+        }
         else
+        {
             retryButton.GetComponent<Image>().sprite = icon1;
+            RewardIcon.gameObject.SetActive(true);
+        }
     }
 
     private void RestartLevel()

@@ -1,3 +1,3 @@
 ﻿Build path: D:/Unity/Build/GoGoPowerRanger/build
-Build number: 13
-PluginYG version: 2.009
+Build number: 14
+PluginYG version: 2.0091
